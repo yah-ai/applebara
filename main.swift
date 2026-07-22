@@ -380,9 +380,13 @@ func installEventHandler() {
     }, 1, &spec, nil, nil)
 }
 
+func unregisterHotKey() {
+    if let r = controller.hotRef { UnregisterEventHotKey(r); controller.hotRef = nil }
+}
+
 @discardableResult
 func registerHotKey() -> OSStatus {
-    if let r = controller.hotRef { UnregisterEventHotKey(r); controller.hotRef = nil }
+    unregisterHotKey()
     let hkID = EventHotKeyID(signature: OSType(0x4150424b), id: 1) // 'APBK'
     let mods: UInt32 = useCmdSpace ? UInt32(cmdKey) : UInt32(optionKey)
     return RegisterEventHotKey(UInt32(kVK_Space), mods, hkID,
@@ -435,9 +439,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleCmdSpace() {
         let want = !useCmdSpace
-        // hand the combo over (or give it back) before rebinding ours
+        // Release our binding FIRST. Otherwise, while Spotlight is being re-enabled
+        // we'd both still be on ⌘Space and a single press would fire both.
+        unregisterHotKey()
         if !Spotlight.setShortcut(enabled: !want) {
             alert("Couldn't read the Spotlight shortcut settings, so ⌘Space wasn't changed.")
+            registerHotKey()          // put our old binding back
             return
         }
         useCmdSpace = want
