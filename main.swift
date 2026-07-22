@@ -1,12 +1,9 @@
 import AppKit
 import Carbon.HIToolbox
 
-// ── Hotkey config ─────────────────────────────────────────────────────────
-// Default: Option+Space (no conflict with Spotlight, works immediately).
-// After you free Cmd+Space (System Settings ▸ Keyboard ▸ Shortcuts ▸ Spotlight),
-// change `hotMods` to UInt32(cmdKey) and rebuild to take over Cmd+Space.
-let hotKeyCode: UInt32 = UInt32(kVK_Space)
-let hotMods: UInt32 = UInt32(optionKey)
+// ── Hotkey ────────────────────────────────────────────────────────────────
+// Ships on ⌥Space. Use the menu-bar item "Use ⌘Space (replaces Spotlight)" to
+// hand ⌘Space over from Spotlight to Applebara — and to give it back.
 
 // ── App index ─────────────────────────────────────────────────────────────
 struct App { let name: String; let path: String; let lname: String }
@@ -323,28 +320,87 @@ final class Controller: NSObject, NSTextFieldDelegate {
     @objc func toggle() { panel.isVisible ? hide() : show() }
 }
 
+// ── Spotlight's ⌘Space ─────────────────────────────────────────────────────
+// macOS keeps global shortcuts in com.apple.symbolichotkeys; entry 64 is
+// "Show Spotlight search". Flipping `enabled` and poking activateSettings
+// hands the key combo over (and back) without a logout.
+enum Spotlight {
+    static let domain = "com.apple.symbolichotkeys" as CFString
+    static let key = "AppleSymbolicHotKeys" as CFString
+    static let showSearch = "64"
+
+    static var shortcutEnabled: Bool {
+        guard let all = CFPreferencesCopyAppValue(key, domain) as? [String: Any],
+              let e = all[showSearch] as? [String: Any],
+              let on = e["enabled"] as? Bool else { return true }
+        return on
+    }
+
+    // ⌘Space as macOS encodes it: (space char, kVK_Space, cmdKey mask)
+    static let defaultValue: [String: Any] = [
+        "parameters": [32, 49, 1_048_576],
+        "type": "standard",
+    ]
+
+    @discardableResult
+    static func setShortcut(enabled: Bool) -> Bool {
+        // The entry is absent until the shortcut is customized once — synthesize it.
+        var all = (CFPreferencesCopyAppValue(key, domain) as? [String: Any]) ?? [:]
+        var entry = (all[showSearch] as? [String: Any]) ?? ["value": defaultValue]
+        if entry["value"] == nil { entry["value"] = defaultValue }
+        entry["enabled"] = enabled
+        all[showSearch] = entry
+        CFPreferencesSetAppValue(key, all as CFDictionary, domain)
+        CFPreferencesAppSynchronize(domain)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath:
+            "/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings")
+        p.arguments = ["-u"]
+        try? p.run()
+        p.waitUntilExit()
+        return true
+    }
+}
+
 // ── Global hotkey plumbing (Carbon; no Accessibility permission needed) ────
 let controller = Controller()
 var gToggle: () -> Void = { }
+let kUseCmdSpace = "useCommandSpace"
 
-func installHotKey() {
-    let hkID = EventHotKeyID(signature: OSType(0x4150424b), id: 1) // 'APBK'
+var useCmdSpace: Bool {
+    get { UserDefaults.standard.bool(forKey: kUseCmdSpace) }
+    set { UserDefaults.standard.set(newValue, forKey: kUseCmdSpace) }
+}
+
+func installEventHandler() {
     var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
     InstallEventHandler(GetApplicationEventTarget(), { _, _, _ -> OSStatus in
         DispatchQueue.main.async { gToggle() }
         return noErr
     }, 1, &spec, nil, nil)
-    RegisterEventHotKey(hotKeyCode, hotMods, hkID, GetApplicationEventTarget(), 0, &controller.hotRef)
+}
+
+@discardableResult
+func registerHotKey() -> OSStatus {
+    if let r = controller.hotRef { UnregisterEventHotKey(r); controller.hotRef = nil }
+    let hkID = EventHotKeyID(signature: OSType(0x4150424b), id: 1) // 'APBK'
+    let mods: UInt32 = useCmdSpace ? UInt32(cmdKey) : UInt32(optionKey)
+    return RegisterEventHotKey(UInt32(kVK_Space), mods, hkID,
+                               GetApplicationEventTarget(), 0, &controller.hotRef)
 }
 
 // ── App ────────────────────────────────────────────────────────────────────
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var status: NSStatusItem!
+    var openItem: NSMenuItem!
+    var hotkeyItem: NSMenuItem!
+
     func applicationDidFinishLaunching(_ n: Notification) {
         NSApp.setActivationPolicy(.accessory)
         controller.build()
         gToggle = { [weak controller] in controller?.toggle() }
-        installHotKey()
+        installEventHandler()
+        registerHotKey()
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.main.url(forResource: "menubar", withExtension: "png"),
            let img = NSImage(contentsOf: url) {
@@ -357,12 +413,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             status.button?.title = "🦫"
         }
         let m = NSMenu()
-        m.addItem(NSMenuItem(title: "Open Applebara  (⌥Space)", action: #selector(open), keyEquivalent: ""))
-        m.items.last?.target = self
+        openItem = NSMenuItem(title: "Open Applebara", action: #selector(open), keyEquivalent: "")
+        openItem.target = self
+        m.addItem(openItem)
         m.addItem(.separator())
-        m.addItem(NSMenuItem(title: "Quit Applebara", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        hotkeyItem = NSMenuItem(title: "Use ⌘Space (replaces Spotlight)",
+                                action: #selector(toggleCmdSpace), keyEquivalent: "")
+        hotkeyItem.target = self
+        m.addItem(hotkeyItem)
+        m.addItem(.separator())
+        m.addItem(NSMenuItem(title: "Quit Applebara",
+                             action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         status.menu = m
+        refreshMenu()
     }
+
+    func refreshMenu() {
+        openItem.title = "Open Applebara  (\(useCmdSpace ? "⌘" : "⌥")Space)"
+        hotkeyItem.state = useCmdSpace ? .on : .off
+    }
+
+    @objc func toggleCmdSpace() {
+        let want = !useCmdSpace
+        // hand the combo over (or give it back) before rebinding ours
+        if !Spotlight.setShortcut(enabled: !want) {
+            alert("Couldn't read the Spotlight shortcut settings, so ⌘Space wasn't changed.")
+            return
+        }
+        useCmdSpace = want
+        // WindowServer needs a beat to release/reclaim the combo
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            let st = registerHotKey()
+            if st != noErr {
+                self?.alert("Couldn't bind \(want ? "⌘" : "⌥")Space (error \(st)). Something else may be holding it.")
+            }
+            self?.refreshMenu()
+        }
+        refreshMenu()
+    }
+
+    func alert(_ text: String) {
+        let a = NSAlert()
+        a.messageText = "Applebara"
+        a.informativeText = text
+        a.runModal()
+    }
+
     @objc func open() { controller.show() }
 }
 
