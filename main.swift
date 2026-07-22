@@ -149,7 +149,7 @@ final class ListRow: NSView {
 }
 
 // ── Controller ────────────────────────────────────────────────────────────
-final class Controller: NSObject, NSTextFieldDelegate {
+final class Controller: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var apps: [App] = []
     var results: [App] = []
     var sel = 0
@@ -179,7 +179,11 @@ final class Controller: NSObject, NSTextFieldDelegate {
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
         panel.level = .floating
-        panel.hidesOnDeactivate = true
+        // Dismiss-on-click-away is ours to do (see windowDidResignKey). Letting
+        // AppKit do it via hidesOnDeactivate leaves the panel flagged for
+        // restore-on-reactivate, so the next hotkey toggled the wrong way.
+        panel.hidesOnDeactivate = false
+        panel.delegate = self
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
@@ -318,6 +322,9 @@ final class Controller: NSObject, NSTextFieldDelegate {
     }
     func hide() { panel.orderOut(nil) }
     @objc func toggle() { panel.isVisible ? hide() : show() }
+
+    // Clicking anywhere outside the panel dismisses it, same as Spotlight.
+    func windowDidResignKey(_ n: Notification) { hide() }
 }
 
 // ── Spotlight's ⌘Space ─────────────────────────────────────────────────────

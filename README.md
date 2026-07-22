@@ -32,8 +32,15 @@ Requires the Xcode command-line tools (`swiftc`, `sips`, `iconutil`). No Xcode p
 
 ## Install & make it your ⌘Space
 
-1. Move `Applebara.app` to `/Applications` and add it as a Login Item.
-2. Click the capybara in the menu bar → **Use ⌘Space (replaces Spotlight)**.
+```sh
+./install.sh        # build, replace /Applications/Applebara.app, relaunch
+```
+
+Then add it as a Login Item (System Settings → General → Login Items) and click
+the capybara in the menu bar → **Use ⌘Space (replaces Spotlight)**.
+
+`SKIP_BUILD=1 ./install.sh` installs the `Applebara.app` already in the working
+directory — useful after `scripts/notarize.sh`, which staples the existing bundle.
 
 That's it. The toggle disables Spotlight's ⌘Space shortcut and rebinds Applebara
 to it, taking effect immediately — no logout. Click it again to hand ⌘Space back
