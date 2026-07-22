@@ -1,0 +1,16 @@
+# build artifacts
+*.app/
+*.icns
+*.iconset/
+build/
+dist/
+*.zip
+*.dmg
+
+# compiled helper binaries
+scripts/compose_icon
+compose_icon
+render_icon
+
+# macOS
+.DS_Store
