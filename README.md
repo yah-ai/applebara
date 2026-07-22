@@ -33,14 +33,21 @@ Requires the Xcode command-line tools (`swiftc`, `sips`, `iconutil`). No Xcode p
 ## Install & make it your ⌘Space
 
 1. Move `Applebara.app` to `/Applications` and add it as a Login Item.
-2. Free up ⌘Space: **System Settings → Keyboard → Keyboard Shortcuts → Spotlight** → uncheck *Show Spotlight search*.
-3. Change the hotkey in `main.swift` from `optionKey` to `cmdKey` (top of file) and rebuild.
-4. Optional — reclaim the Spotlight index entirely:
-   ```sh
-   sudo mdutil -a -i off && sudo mdutil -a -E
-   ```
+2. Click the capybara in the menu bar → **Use ⌘Space (replaces Spotlight)**.
 
-The hotkey ships as **⌥Space** by default so it works immediately without colliding with Spotlight.
+That's it. The toggle disables Spotlight's ⌘Space shortcut and rebinds Applebara
+to it, taking effect immediately — no logout. Click it again to hand ⌘Space back
+to Spotlight. The hotkey ships as **⌥Space** so it works out of the box without
+colliding with anything.
+
+Optional — once you're no longer using Spotlight, reclaim its index entirely
+(~1 GB resident, plus all the background indexing):
+
+```sh
+sudo mdutil -a -i off && sudo mdutil -a -E
+```
+
+To undo: `sudo mdutil -a -i on`.
 
 ## Distribution (signed + notarized)
 
