@@ -346,14 +346,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gToggle = { [weak controller] in controller?.toggle() }
         installHotKey()
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let icon = NSApp.applicationIconImage {
-            let img = NSImage(size: NSSize(width: 18, height: 18))
-            img.lockFocus()
-            icon.draw(in: NSRect(x: 0, y: 0, width: 18, height: 18))
-            img.unlockFocus()
+        if let url = Bundle.main.url(forResource: "menubar", withExtension: "png"),
+           let img = NSImage(contentsOf: url) {
+            let barH: CGFloat = 18
+            let aspect = img.size.width / max(img.size.height, 1)
+            img.size = NSSize(width: barH * aspect, height: barH)   // keep the wide capybara shape
+            img.isTemplate = true                                    // macOS tints for light/dark menu bar
             status.button?.image = img
         } else {
-            status.button?.title = "🐹"
+            status.button?.title = "🦫"
         }
         let m = NSMenu()
         m.addItem(NSMenuItem(title: "Open Applebara  (⌥Space)", action: #selector(open), keyEquivalent: ""))

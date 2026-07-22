@@ -25,6 +25,7 @@ echo "▸ compile"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -o "$APP/Contents/MacOS/$NAME" main.swift
 cp "$NAME.icns" "$APP/Contents/Resources/$NAME.icns"
+cp assets/menubar.png "$APP/Contents/Resources/menubar.png"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
